@@ -3,28 +3,28 @@ using System.Collections.Generic;
 
 namespace RamjetAnvil.Coroutine {
     public class CoroutineScheduler {
-        private readonly IList<Coroutine> _routines;
+        private readonly IList<Routine> _routines;
 
         private int _prevFrame;
         private float _prevTime;
 
         public CoroutineScheduler() {
-            _routines = new List<Coroutine>();
+            _routines = new List<Routine>();
             _prevFrame = -1;
             _prevTime = 0f;
         }
 
-        public Coroutine Start(IEnumerator<WaitCommand> fibre) {
+        public Routine Start(IEnumerator<WaitCommand> fibre) {
             if (fibre == null) {
-                throw new Exception("Coroutine cannot be null");
+                throw new Exception("Routine cannot be null");
             }
 
-            var coroutine = new Coroutine(fibre);
+            var coroutine = new Routine(fibre);
             _routines.Add(coroutine);
             return coroutine;
         }
 
-        public void Stop(Coroutine r) {
+        public void Stop(Routine r) {
             _routines.Remove(r);
         }
 
@@ -94,16 +94,16 @@ namespace RamjetAnvil.Coroutine {
         }
     }
 
-    public class Coroutine {
+    public class Routine {
 
         private readonly Stack<WaitCommand> _instructionStack;
 
-        public Coroutine(IEnumerator<WaitCommand> fibre) {
+        public Routine(IEnumerator<WaitCommand> fibre) {
             _instructionStack = new Stack<WaitCommand>();
             _instructionStack.Push(new WaitCommand {Routine = fibre});
         }
 
-        public Coroutine(Stack<WaitCommand> instructionStack) {
+        public Routine(Stack<WaitCommand> instructionStack) {
             _instructionStack = instructionStack;
         }
 
