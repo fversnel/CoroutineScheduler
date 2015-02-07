@@ -108,29 +108,32 @@ namespace RamjetAnvil.Coroutine {
         }
 
         public void Update(TimeInfo time) {
-            var instruction = _instructionStack.Peek();
-            var isInstructionFinished = false;
-
-            if (instruction.Frames.HasValue) {
-                instruction.Frames -= time.DeltaFrames;
-                isInstructionFinished = instruction.Frames.Value <= 0;
-                UpdateCurrentInstruction(instruction);
-            } else if (instruction.Seconds.HasValue) {
-                instruction.Seconds -= time.DeltaTime;
-                isInstructionFinished = instruction.Seconds.Value <= 0f;
-                UpdateCurrentInstruction(instruction);
-            } else if (instruction.Routine != null) {
+            // Push/Pop (sub-)coroutines until we get another instruction or we run out of instructions.
+            while (_instructionStack.Count > 0 && _instructionStack.Peek().Routine != null) {
+                var instruction = _instructionStack.Peek();
                 if (instruction.Routine.MoveNext()) {
-                    // Push as long as we get wait routines
                     _instructionStack.Push(instruction.Routine.Current);
-                    Update(time);
                 } else {
-                    isInstructionFinished = true;
+                    _instructionStack.Pop();
                 }
             }
 
-            if (isInstructionFinished) {
-                _instructionStack.Pop();
+            if (_instructionStack.Count > 0) {
+                var instruction = _instructionStack.Peek();
+                var isInstructionFinished = false;
+                if (instruction.Frames.HasValue) {
+                    instruction.Frames -= time.DeltaFrames;
+                    isInstructionFinished = instruction.Frames.Value <= 0;
+                    UpdateCurrentInstruction(instruction);
+                } else if (instruction.Seconds.HasValue) {
+                    instruction.Seconds -= time.DeltaTime;
+                    isInstructionFinished = instruction.Seconds.Value <= 0f;
+                    UpdateCurrentInstruction(instruction);
+                }
+
+                if (isInstructionFinished) {
+                    _instructionStack.Pop();
+                }
             }
         }
 
