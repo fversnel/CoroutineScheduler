@@ -31,9 +31,9 @@ namespace RamjetAnvil.Coroutine {
             for (int i = _routines.Count - 1; i >= 0; i--) {
                 if (_routines[i].Equals(r)) {
                     _routines.RemoveAt(i);
+                    _routinePool.Return(r);
                 }
             }
-            _routinePool.Return(r);
         }
 
         public void Update(int currentFrame, float currentTime) {
