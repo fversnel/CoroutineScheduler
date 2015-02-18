@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 
 namespace RamjetAnvil.Coroutine {
+
     public class ObjectPool<T> where T : IResetable {
 
         private readonly int _growthStep;

@@ -82,11 +82,19 @@ namespace RamjetAnvil.Coroutine {
         }
 
         public static WaitCommand WaitForNextFrame {
-            get { return new WaitCommand { Frames = 0 }; }
+            get { return new WaitCommand { Frames = 1 }; }
+        }
+
+        public static WaitCommand DontWait {
+            get { return new WaitCommand(); }
         }
 
         public static WaitCommand WaitRoutine(IEnumerator<WaitCommand> routine) {
             return new WaitCommand { Routine = routine };
+        }
+
+        public bool IsFinished {
+            get { return Seconds <= 0f && Frames <= 0; }
         }
     }
 
@@ -108,8 +116,7 @@ namespace RamjetAnvil.Coroutine {
             instruction.Frames -= time.DeltaFrames;
             instruction.Seconds -= time.DeltaTime;
 
-            var isInstructionFinished = instruction.Seconds <= 0f && instruction.Frames <= 0;
-            if (isInstructionFinished) {
+            if (instruction.IsFinished) {
                 _instructionStack.Pop();
             } else {
                 // Update current instruction
@@ -125,7 +132,10 @@ namespace RamjetAnvil.Coroutine {
             while (_instructionStack.Count > 0 && _instructionStack.Peek().Routine != null) {
                 var instruction = _instructionStack.Peek();
                 if (instruction.Routine.MoveNext()) {
-                    _instructionStack.Push(instruction.Routine.Current);
+                    // Skip instructions that are already finished
+                    if (!instruction.Routine.Current.IsFinished) {
+                        _instructionStack.Push(instruction.Routine.Current);
+                    }
                 } else {
                     _instructionStack.Pop();
                 }
