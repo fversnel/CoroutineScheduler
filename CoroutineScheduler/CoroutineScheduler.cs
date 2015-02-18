@@ -94,7 +94,7 @@ namespace RamjetAnvil.Coroutine {
         }
 
         public bool IsFinished {
-            get { return Seconds <= 0f && Frames <= 0; }
+            get { return Seconds <= 0f && Frames <= 0 && Routine == null; }
         }
     }
 
