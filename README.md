@@ -12,22 +12,27 @@ The implementation re-uses objects as much a possible using object pooling. The 
 
 ## Example
 
-    IEnumerator Routine1() {
-    	yield return WaitCommand.WaitSeconds(1f);
-    	// Do something
-        yield return WaitCommand.WaitFrames(5);
-		// Do something else
-		// Wait for another co-routine to finish
-		yield return WaitCommand.WaitRoutine(OtherRoutine());
-        yield return WaitCommand.WaitForNextFrame;
-		// Finalize
-    }
+``` c#
+IEnumerator SomeRoutine() {
+    yield return WaitCommand.WaitSeconds(1f);
+    // Do something
+    yield return WaitCommand.WaitFrames(5);
+	// Do something else
+	// Wait for another co-routine to finish
+	yield return WaitCommand.WaitRoutine(OtherRoutine());
+    yield return WaitCommand.WaitForNextFrame;
+	// Finalize
+}
 
-    // Create a scheduler and start the co-routine
-    var s = new CoroutineScheduler();
-    s.Start(Routine1());
+// Create a scheduler and start the co-routine
+var scheduler = new CoroutineScheduler();
+var routine = scheduler.Run(SomeRoutine());
 
-    void Update() {
-        // You control the update-rate of the scheduler
-        scheduler.Update(Time.FrameCount, Time.CurrentTime);
-    }
+// Dispose routine to cancel it when it is still running
+//routine.Dispose();
+
+void Update() {
+    // You control the update-rate of the scheduler
+    scheduler.Update(Time.FrameCount, Time.CurrentTime);
+}
+```
