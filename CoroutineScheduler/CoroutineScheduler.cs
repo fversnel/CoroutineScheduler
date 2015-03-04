@@ -2,7 +2,12 @@
 using System.Collections.Generic;
 
 namespace RamjetAnvil.Coroutine {
-    public class CoroutineScheduler {
+    public interface ICoroutineScheduler {
+        Routine Run(IEnumerator<WaitCommand> fibre);
+        void Stop(Routine r);
+    }
+
+    public class CoroutineScheduler : ICoroutineScheduler {
         private readonly ObjectPool<Routine> _routinePool; 
         private readonly IList<Routine> _routines;
 
@@ -16,7 +21,7 @@ namespace RamjetAnvil.Coroutine {
             _prevTime = 0f;
         }
 
-        public Routine Start(IEnumerator<WaitCommand> fibre) {
+        public Routine Run(IEnumerator<WaitCommand> fibre) {
             if (fibre == null) {
                 throw new Exception("Routine cannot be null");
             }
