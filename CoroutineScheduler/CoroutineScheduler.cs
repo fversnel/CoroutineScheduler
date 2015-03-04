@@ -3,8 +3,7 @@ using System.Collections.Generic;
 
 namespace RamjetAnvil.Coroutine {
     public interface ICoroutineScheduler {
-        Routine Run(IEnumerator<WaitCommand> fibre);
-        void Stop(Routine r);
+        IDisposable Run(IEnumerator<WaitCommand> fibre);
     }
 
     public class CoroutineScheduler : ICoroutineScheduler {
@@ -15,13 +14,13 @@ namespace RamjetAnvil.Coroutine {
         private float _prevTime;
 
         public CoroutineScheduler(int initialCapacity = 10, int growthStep = 10) {
-            _routinePool = new ObjectPool<Routine>(factory: () => new Routine(), growthStep: growthStep);
+            _routinePool = new ObjectPool<Routine>(factory: () => new Routine(Stop), growthStep: growthStep);
             _routines = new List<Routine>(capacity: initialCapacity);
             _prevFrame = -1;
             _prevTime = 0f;
         }
 
-        public Routine Run(IEnumerator<WaitCommand> fibre) {
+        public IDisposable Run(IEnumerator<WaitCommand> fibre) {
             if (fibre == null) {
                 throw new Exception("Routine cannot be null");
             }
@@ -32,7 +31,7 @@ namespace RamjetAnvil.Coroutine {
             return coroutine;
         }
 
-        public void Stop(Routine r) {
+        private void Stop(Routine r) {
             for (int i = _routines.Count - 1; i >= 0; i--) {
                 if (_routines[i].Equals(r)) {
                     _routines.RemoveAt(i);
@@ -103,11 +102,13 @@ namespace RamjetAnvil.Coroutine {
         }
     }
 
-    public class Routine : IResetable {
+    public class Routine : IResetable, IDisposable {
 
         private readonly Stack<WaitCommand> _instructionStack;
+        private readonly Action<Routine> _disposeRoutine; 
 
-        public Routine() {
+        public Routine(Action<Routine> disposeRoutine) {
+            _disposeRoutine = disposeRoutine;
             _instructionStack = new Stack<WaitCommand>();
         }
 
@@ -118,18 +119,17 @@ namespace RamjetAnvil.Coroutine {
 
         public void Update(TimeInfo time) {
             var instruction = _instructionStack.Peek();
-            instruction.Frames -= time.DeltaFrames;
-            instruction.Seconds -= time.DeltaTime;
 
             if (instruction.IsFinished) {
                 _instructionStack.Pop();
+                FetchNextInstruction();
             } else {
                 // Update current instruction
+                instruction.Frames -= time.DeltaFrames;
+                instruction.Seconds -= time.DeltaTime;
                 _instructionStack.Pop();
                 _instructionStack.Push(instruction);
             }
-            
-            FetchNextInstruction();
         }
 
         private void FetchNextInstruction() {
@@ -153,6 +153,10 @@ namespace RamjetAnvil.Coroutine {
 
         public void Reset() {
             _instructionStack.Clear();
+        }
+
+        public void Dispose() {
+            _disposeRoutine(this);
         }
     }
 }
