@@ -102,6 +102,12 @@ namespace RamjetAnvil.Coroutine {
         }
     }
 
+    public static class WaitCommandExtensions {
+        public static WaitCommand AsWaitCommand(this IEnumerator<WaitCommand> coroutine) {
+            return WaitCommand.WaitRoutine(coroutine);
+        }
+    }
+
     public class Routine : IResetable, IDisposable {
 
         private readonly Stack<WaitCommand> _instructionStack;
@@ -118,33 +124,43 @@ namespace RamjetAnvil.Coroutine {
         }
 
         public void Update(TimeInfo time) {
-            var instruction = _instructionStack.Peek();
-
-            if (instruction.IsFinished) {
+            // Find a new instruction and make it the current one
+            if (CurrentInstruction.IsFinished) {
                 _instructionStack.Pop();
                 FetchNextInstruction();
-            } else {
-                // Update current instruction
-                instruction.Frames -= time.DeltaFrames;
-                instruction.Seconds -= time.DeltaTime;
-                _instructionStack.Pop();
-                _instructionStack.Push(instruction);
+            }
+
+            // Update the current instruction
+            if (!IsFinished) {
+                UpdateCurrentInstruction(new WaitCommand {
+                    Frames = CurrentInstruction.Frames - time.DeltaFrames, 
+                    Seconds = CurrentInstruction.Seconds - time.DeltaTime
+                });
             }
         }
 
         private void FetchNextInstruction() {
             // Push/Pop (sub-)coroutines until we get another instruction or we run out of instructions.
-            while (_instructionStack.Count > 0 && _instructionStack.Peek().Routine != null) {
-                var instruction = _instructionStack.Peek();
-                if (instruction.Routine.MoveNext()) {
-                    // Skip instructions that are already finished
-                    if (!instruction.Routine.Current.IsFinished) {
-                        _instructionStack.Push(instruction.Routine.Current);
+            while (!IsFinished && CurrentInstruction.Routine != null) {
+                if (CurrentInstruction.Routine.MoveNext()) {
+                    // Skip empty instructions
+                    var newInstruction = CurrentInstruction.Routine.Current;
+                    if (!newInstruction.IsFinished) {
+                        _instructionStack.Push(newInstruction);    
                     }
                 } else {
                     _instructionStack.Pop();
                 }
             }
+        }
+
+        private void UpdateCurrentInstruction(WaitCommand updatedInstruction) {
+            _instructionStack.Pop();
+            _instructionStack.Push(updatedInstruction);
+        }
+
+        private WaitCommand CurrentInstruction {
+            get { return _instructionStack.Peek(); }
         }
 
         public bool IsFinished {
