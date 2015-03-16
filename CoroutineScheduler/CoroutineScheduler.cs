@@ -106,6 +106,50 @@ namespace RamjetAnvil.Coroutine {
         public static WaitCommand AsWaitCommand(this IEnumerator<WaitCommand> coroutine) {
             return WaitCommand.WaitRoutine(coroutine);
         }
+
+        public static IEnumerator<WaitCommand> AsRoutine(this WaitCommand waitCommand) {
+            yield return waitCommand;
+        } 
+
+        public static WaitCommand Combine(this WaitCommand first, WaitCommand second) {
+            return new WaitCommand {
+                Frames = Math.Max(first.Frames, second.Frames),
+                Seconds = Math.Max(first.Seconds, second.Seconds),
+                Routine = null // Combining routines is not supported at the moment
+            };
+        }
+
+        public static IEnumerator<WaitCommand> Then(this IEnumerator<WaitCommand> first,
+            IEnumerator<WaitCommand> second) {
+            while (first.MoveNext()) {
+                yield return first.Current;
+            }
+            while (second.MoveNext()) {
+                yield return second.Current;
+            }
+        }
+
+        public static IEnumerator<WaitCommand> Interleave(this IEnumerator<WaitCommand> first, 
+            IEnumerator<WaitCommand> second) {
+            var isRunning = true;
+            while (isRunning) {
+                var isFirst = first.MoveNext();
+                var isSecond = second.MoveNext();
+
+                WaitCommand command = WaitCommand.DontWait; 
+                if (isFirst && isSecond) {
+                    command = first.Current.Combine(second.Current);
+                } else if (isFirst) {
+                    command = first.Current;
+                } else if (isSecond) {
+                    command = second.Current;
+                }
+
+                yield return command;
+
+                isRunning = isFirst || isSecond;
+            }
+        }
     }
 
     public class Routine : IResetable, IDisposable {
