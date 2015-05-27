@@ -150,6 +150,12 @@ namespace RamjetAnvil.Coroutine {
                 isRunning = isFirst || isSecond;
             }
         }
+
+        public static void Skip(this IEnumerator<WaitCommand> routine) {
+            while (routine.MoveNext()) {
+                // Ignore
+            }
+        }
     }
 
     public class Routine : IResetable, IDisposable {
