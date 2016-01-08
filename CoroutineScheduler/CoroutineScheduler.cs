@@ -4,7 +4,6 @@ using System.Collections.Generic;
 namespace RamjetAnvil.Coroutine {
     public interface ICoroutineScheduler {
         IDisposable Run(IEnumerator<WaitCommand> fibre);
-        void Update(int currentFrame, float currentTime);
     }
 
     public class CoroutineScheduler : ICoroutineScheduler {
