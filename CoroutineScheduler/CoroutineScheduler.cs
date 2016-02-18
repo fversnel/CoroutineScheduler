@@ -10,8 +10,8 @@ namespace RamjetAnvil.Coroutine {
         private readonly ObjectPool<Routine> _routinePool; 
         private readonly IList<Routine> _routines;
 
-        private int _prevFrame;
-        private float _prevTime;
+        private long _prevFrame;
+        private double _prevTime;
 
         public CoroutineScheduler(int initialCapacity = 10, int growthStep = 10) {
             _routinePool = new ObjectPool<Routine>(factory: () => new Routine(Stop), growthStep: growthStep);
@@ -40,10 +40,10 @@ namespace RamjetAnvil.Coroutine {
             }
         }
 
-        public void Update(int currentFrame, float currentTime) {
+        public void Update(long currentFrame, double currentTime) {
             var timeInfo = new TimeInfo {
-                DeltaFrames = currentFrame - _prevFrame,
-                DeltaTime = currentTime - _prevTime
+                DeltaFrames = (int) (currentFrame - _prevFrame),
+                DeltaTime = (float) (currentTime - _prevTime)
             };
 
             for (int i = _routines.Count - 1; i >= 0; i--) {
@@ -155,6 +155,43 @@ namespace RamjetAnvil.Coroutine {
             while (routine.MoveNext()) {
                 // Ignore
             }
+        }
+    }
+
+    public static class Coroutine {
+        public static IAsyncResult<T> FromCallback<T>(Action<Action<T>> invoke) {
+            var asyncResult = new AsyncResult<T>();
+            invoke(asyncResult.SetResult);
+            return asyncResult;
+        }
+    }
+    
+    public interface IAsyncResult<out T> {
+        T Result { get; }
+        bool IsResultAvailable { get; }
+    }
+
+    public class AsyncResult<T> : IAsyncResult<T> {
+
+        private T _result;
+        private volatile bool _isResultAvailable;
+
+        public void SetResult(T result) {
+            _result = result;
+            _isResultAvailable = true;
+        }
+
+        public void Reset() {
+            _isResultAvailable = false;
+            _result = default(T);
+        }
+
+        public T Result {
+            get { return _result; }
+        }
+
+        public bool IsResultAvailable {
+            get { return _isResultAvailable; }
         }
     }
 
