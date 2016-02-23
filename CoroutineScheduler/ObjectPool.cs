@@ -5,7 +5,7 @@ using System.Text;
 
 namespace RamjetAnvil.Coroutine {
 
-    public class ObjectPool<T> where T : IResetable {
+    internal class ObjectPool<T> where T : IResetable {
 
         private readonly int _growthStep;
         private readonly Func<T> _factory;

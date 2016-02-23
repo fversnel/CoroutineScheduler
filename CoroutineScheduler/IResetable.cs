@@ -5,7 +5,7 @@ using System.Text;
 
 namespace RamjetAnvil.Coroutine {
 
-    public interface IResetable {
+    internal interface IResetable {
         void Reset();
     }
 }
