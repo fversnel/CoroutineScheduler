@@ -43,6 +43,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CoroutineScheduler.cs" />
+    <Compile Include="Event.cs" />
     <Compile Include="IResetable.cs" />
     <Compile Include="ObjectPool.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace RamjetAnvil.Coroutine {
     public interface ICoroutineScheduler {
@@ -158,32 +159,13 @@ namespace RamjetAnvil.Coroutine {
         }
     }
 
-    public static class Coroutine {
-        public static IAsyncResult<T> FromCallback<T>(Action<Action<T>> invoke) {
-            var asyncResult = new AsyncResult<T>();
-            invoke(asyncResult.SetResult);
-            return asyncResult;
-        }
-    }
-    
-    public interface IAsyncResult<out T> {
-        T Result { get; }
-        bool IsResultAvailable { get; }
-    }
-
-    public class AsyncResult<T> : IAsyncResult<T> {
-
+    public class AsyncResult<T> {
         private T _result;
-        private volatile bool _isResultAvailable;
+        private bool _isResultAvailable;
 
         public void SetResult(T result) {
             _result = result;
             _isResultAvailable = true;
-        }
-
-        public void Reset() {
-            _isResultAvailable = false;
-            _result = default(T);
         }
 
         public T Result {
@@ -193,7 +175,52 @@ namespace RamjetAnvil.Coroutine {
         public bool IsResultAvailable {
             get { return _isResultAvailable; }
         }
+
+        public static AsyncResult<T> FromCallback(Action<Action<T>> invoke) {
+            var asyncResult = new AsyncResult<T>();
+            invoke(asyncResult.SetResult);
+            return asyncResult;
+        }
+
+        public static EventResult SingleResultFromEvent(Event @event, Func<T, bool> predicate = null) {
+            var asyncResult = new AsyncResult<T>();
+            var awaitResult = Wait(asyncResult, @event, predicate);
+            awaitResult.MoveNext();
+            return new EventResult(asyncResult, awaitResult.AsWaitCommand());
+        }
+
+        private static IEnumerator<WaitCommand> Wait(AsyncResult<T> asyncResult, 
+            Event @event, 
+            Func<T, bool> predicate) {
+
+            Action<T> setResult = @obj => {
+                if (predicate == null || predicate(obj)) {
+                    asyncResult.SetResult(obj);
+                }
+            };
+            @event.AddHandler(setResult);
+            while (!asyncResult.IsResultAvailable) {
+                yield return WaitCommand.WaitForNextFrame;
+            }
+            @event.RemoveHandler(setResult);
+        }
+
+        public class EventResult {
+            private readonly AsyncResult<T> _asyncResult;
+            public readonly WaitCommand WaitUntilReady;
+
+            public EventResult(AsyncResult<T> asyncResult, WaitCommand waitUntilReady) {
+                _asyncResult = asyncResult;
+                WaitUntilReady = waitUntilReady;
+            }
+
+            public T Result {
+                get { return _asyncResult.Result; }    
+            }
+        }
     }
+
+
 
     public class Routine : IResetable, IDisposable {
 
