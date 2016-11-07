@@ -15,13 +15,17 @@ namespace RamjetAnvil.Coroutine {
         private double _prevTime;
 
         public CoroutineScheduler(int initialCapacity = 10, int growthStep = 10) {
-            _routinePool = new ObjectPool<Routine>(factory: () => new Routine(Stop), growthStep: growthStep);
+            _routinePool = new ObjectPool<Routine>(factory: () => new Routine(RunInternal, Stop), growthStep: growthStep);
             _routines = new List<Routine>(capacity: initialCapacity);
             _prevFrame = -1;
             _prevTime = 0f;
         }
 
         public IDisposable Run(IEnumerator<WaitCommand> fibre) {
+            return RunInternal(fibre);
+        }
+
+        private Routine RunInternal(IEnumerator<WaitCommand> fibre) {
             if (fibre == null) {
                 throw new Exception("Routine cannot be null");
             }
@@ -71,12 +75,16 @@ namespace RamjetAnvil.Coroutine {
             DeltaTime = deltaTime;
             DeltaFrames = deltaFrames;
         }
+
+        public bool IsTimeLeft {
+            get { return DeltaTime > 0f && DeltaFrames > 0; }
+        }
     }
 
     public struct WaitCommand {
         public int Frames;
         public float Seconds;
-        public IEnumerator<WaitCommand> Routine;
+        public IEnumerator<WaitCommand>[] Routines;
 
         public static WaitCommand WaitSeconds(float seconds) {
             return new WaitCommand { Seconds = seconds };
@@ -95,11 +103,15 @@ namespace RamjetAnvil.Coroutine {
         }
 
         public static WaitCommand WaitRoutine(IEnumerator<WaitCommand> routine) {
-            return new WaitCommand { Routine = routine };
+            return new WaitCommand { Routines = new[] { routine } };
+        }
+
+        public bool IsRoutine {
+            get { return Routines != null && Routines.Length > 0; }
         }
 
         public bool IsFinished {
-            get { return Seconds <= 0f && Frames <= 0 && Routine == null; }
+            get { return Seconds <= 0f && Frames <= 0 && !IsRoutine; }
         }
     }
 
@@ -111,15 +123,7 @@ namespace RamjetAnvil.Coroutine {
         public static IEnumerator<WaitCommand> AsRoutine(this WaitCommand waitCommand) {
             yield return waitCommand;
         } 
-
-        public static WaitCommand Combine(this WaitCommand first, WaitCommand second) {
-            return new WaitCommand {
-                Frames = Math.Max(first.Frames, second.Frames),
-                Seconds = Math.Max(first.Seconds, second.Seconds),
-                Routine = null // Combining routines is not supported at the moment
-            };
-        }
-
+        
         public static IEnumerator<WaitCommand> Then(this IEnumerator<WaitCommand> first,
             IEnumerator<WaitCommand> second) {
             while (first.MoveNext()) {
@@ -130,26 +134,8 @@ namespace RamjetAnvil.Coroutine {
             }
         }
 
-        public static IEnumerator<WaitCommand> Interleave(this IEnumerator<WaitCommand> first, 
-            IEnumerator<WaitCommand> second) {
-            var isRunning = true;
-            while (isRunning) {
-                var isFirst = first.MoveNext();
-                var isSecond = second.MoveNext();
-
-                WaitCommand command = WaitCommand.DontWait; 
-                if (isFirst && isSecond) {
-                    command = first.Current.Combine(second.Current);
-                } else if (isFirst) {
-                    command = first.Current;
-                } else if (isSecond) {
-                    command = second.Current;
-                }
-
-                yield return command;
-
-                isRunning = isFirst || isSecond;
-            }
+        public static IEnumerator<WaitCommand> Interleave(params IEnumerator<WaitCommand>[] routines) {
+            yield return new WaitCommand { Routines = routines };
         }
 
         public static void Skip(this IEnumerator<WaitCommand> routine) {
@@ -220,72 +206,115 @@ namespace RamjetAnvil.Coroutine {
         }
     }
 
-
-
     public class Routine : IResetable, IDisposable {
 
-        private readonly Stack<WaitCommand> _instructionStack;
-        private readonly Action<Routine> _disposeRoutine; 
+        private readonly Func<IEnumerator<WaitCommand>, Routine> _startSubroutine;
+        private readonly Action<Routine> _disposeRoutine;
 
-        public Routine(Action<Routine> disposeRoutine) {
+        private IEnumerator<WaitCommand> _fibre;
+
+        private readonly IList<Routine> _activeSubroutines;
+        private WaitCommand _activeWaitCommand;
+        private bool _isFinished;
+        
+
+        public Routine(Func<IEnumerator<WaitCommand>, Routine> startSubroutine, Action<Routine> disposeRoutine) {
+            _startSubroutine = startSubroutine;
             _disposeRoutine = disposeRoutine;
-            _instructionStack = new Stack<WaitCommand>();
+            _activeSubroutines = new List<Routine>();
         }
 
         public void Initialize(IEnumerator<WaitCommand> fibre) {
-            _instructionStack.Push(new WaitCommand { Routine = fibre });
-            FetchNextInstruction();
+            _fibre = fibre;
+            _activeSubroutines.Clear();
+            _activeWaitCommand = WaitCommand.DontWait;
+            _isFinished = false;
+            FetchNextInstruction(new TimeInfo(0f, 0));
         }
 
         public void Update(TimeInfo time) {
-            // Find a new instruction and make it the current one
-            if (CurrentInstruction.IsFinished) {
-                _instructionStack.Pop();
-                FetchNextInstruction();
-            }
+            if (time.IsTimeLeft) {
+                // Find a new instruction and make it the current one
+                if (IsRunningInstructionFinished) {
+                    FetchNextInstruction(time);
+                }
 
-            // Update the current instruction
-            if (!IsFinished) {
-                UpdateCurrentInstruction(new WaitCommand {
-                    Frames = CurrentInstruction.Frames - time.DeltaFrames, 
-                    Seconds = CurrentInstruction.Seconds - time.DeltaTime
-                });
-            }
-        }
+                // Update the current instruction
+                if (!_isFinished) {
+                    if (_activeSubroutines.Count == 0) {
+                        var leftOverTime = new TimeInfo {
+                            DeltaFrames = Math.Max(0, time.DeltaFrames - _activeWaitCommand.Frames),
+                            DeltaTime = Math.Max(0f, time.DeltaTime - _activeWaitCommand.Seconds),
+                        };
 
-        private void FetchNextInstruction() {
-            // Push/Pop (sub-)coroutines until we get another instruction or we run out of instructions.
-            while (!IsFinished && CurrentInstruction.Routine != null) {
-                if (CurrentInstruction.Routine.MoveNext()) {
-                    // Skip empty instructions
-                    var newInstruction = CurrentInstruction.Routine.Current;
-                    if (!newInstruction.IsFinished) {
-                        _instructionStack.Push(newInstruction);    
+                        _activeWaitCommand = new WaitCommand {
+                            Frames = _activeWaitCommand.Frames - time.DeltaFrames,
+                            Seconds = _activeWaitCommand.Seconds - time.DeltaTime
+                        };
+
+                        Update(leftOverTime);
                     }
-                } else {
-                    _instructionStack.Pop();
                 }
             }
         }
 
-        private void UpdateCurrentInstruction(WaitCommand updatedInstruction) {
-            _instructionStack.Pop();
-            _instructionStack.Push(updatedInstruction);
-        }
+        private void FetchNextInstruction(TimeInfo time) {
+            // Push/Pop (sub-)coroutines until we get another instruction or we run out of instructions.
+            while(!_isFinished && IsRunningInstructionFinished) {
+                if (_fibre.MoveNext()) {
+                    var newInstruction = _fibre.Current;
+                    if (newInstruction.IsRoutine) {
+                        for (int i = 0; i < newInstruction.Routines.Length; i++) {
+                            var subroutine = newInstruction.Routines[i];
+                            var startedSubroutine = _startSubroutine(subroutine);
+                            _activeSubroutines.Add(startedSubroutine);
+                            startedSubroutine.Update(time);
+                        }
 
-        private WaitCommand CurrentInstruction {
-            get { return _instructionStack.Peek(); }
+                        _activeWaitCommand = WaitCommand.DontWait;
+                    } else {
+                        _activeWaitCommand = newInstruction;
+                        _activeSubroutines.Clear();
+                    }
+                } else {
+                    _isFinished = true;
+                }
+            }
+        }
+        
+        private bool IsRunningInstructionFinished {
+            get {
+                if (_activeSubroutines.Count > 0) {
+                    var subRoutinesFinished = true;
+                    foreach (var routine in _activeSubroutines) {
+                        subRoutinesFinished = subRoutinesFinished && routine.IsFinished;
+                    }
+                    return subRoutinesFinished;
+                } else {
+                    return _activeWaitCommand.IsFinished;
+                }
+            }
         }
 
         public bool IsFinished {
-            get { return _instructionStack.Count == 0; }
+            get { return _isFinished; }
         }
 
         public void Reset() {
-            _instructionStack.Clear();
+            _fibre = null;
+            for (int i = 0; i < _activeSubroutines.Count; i++) {
+                var activeRoutine = _activeSubroutines[i];
+                activeRoutine.Reset();
+            }
+            _activeSubroutines.Clear();
+            _activeWaitCommand = WaitCommand.DontWait;
         }
 
         public void Dispose() {
+            for (int i = 0; i < _activeSubroutines.Count; i++) {
+                var activeRoutine = _activeSubroutines[i];
+                activeRoutine.Dispose();
+            }
             _disposeRoutine(this);
         }
     }
