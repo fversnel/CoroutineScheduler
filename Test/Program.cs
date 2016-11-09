@@ -45,10 +45,10 @@ namespace Test
         }
 
         static IEnumerator<WaitCommand> Subroutine(bool hasSubroutine, string prefix) {
-            yield return WaitCommand.WaitSeconds(5f);
             if (hasSubroutine) {
                 yield return Subroutine(false, prefix + prefix).AsWaitCommand();
             }
+            yield return WaitCommand.WaitSeconds(5f);
             yield return WaitCommand.DontWait;
             Console.WriteLine(prefix + " subroutine");
         }

@@ -206,6 +206,12 @@ namespace RamjetAnvil.Coroutine {
                 return false;
             }
         }
+
+        public IEnumerator<WaitCommand> AsRoutine {
+            get {
+                yield return this;
+            }
+        }
     }
 
     public static class WaitCommandExtensions {
@@ -213,10 +219,6 @@ namespace RamjetAnvil.Coroutine {
             return WaitCommand.WaitRoutine(coroutine);
         }
 
-        public static IEnumerator<WaitCommand> AsRoutine(this WaitCommand waitCommand) {
-            yield return waitCommand;
-        } 
-        
         public static IEnumerator<WaitCommand> AndThen(
             this IEnumerator<WaitCommand> first,
             IEnumerator<WaitCommand> second) {
@@ -232,9 +234,9 @@ namespace RamjetAnvil.Coroutine {
         public static void Skip(this IEnumerator<WaitCommand> routine) {
             while (routine.MoveNext()) {
                 // Recursively skip subroutines
-                var instruction = routine.Current;
-                for (int i = 0; i < instruction.Routines.Length; i++) {
-                    Skip(instruction.Routines[i]);
+                var instructionRoutines = routine.Current.Routines;
+                for (int i = 0; i < instructionRoutines.Length; i++) {
+                    instructionRoutines[i].Skip();
                 }
             }
         }
