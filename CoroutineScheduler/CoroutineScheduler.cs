@@ -15,7 +15,7 @@ namespace RamjetAnvil.Coroutine {
         private double _prevTime;
 
         public CoroutineScheduler(int initialCapacity = 10, int growthStep = 10) {
-            _routinePool = new ObjectPool<Routine>(factory: () => new Routine(RunInternal, Stop), growthStep: growthStep);
+            _routinePool = new ObjectPool<Routine>(factory: () => new Routine(CreateRoutine, RecycleRoutine), growthStep: growthStep);
             _routines = new List<Routine>(capacity: initialCapacity);
             _prevFrame = -1;
             _prevTime = 0f;
@@ -26,13 +26,18 @@ namespace RamjetAnvil.Coroutine {
         }
 
         private Routine RunInternal(IEnumerator<WaitCommand> fibre) {
+            var coroutine = CreateRoutine(fibre);
+            _routines.Add(coroutine);
+            return coroutine;
+        }
+
+        private Routine CreateRoutine(IEnumerator<WaitCommand> fibre) {
             if (fibre == null) {
                 throw new Exception("Routine cannot be null");
             }
 
             var coroutine = _routinePool.Take();
             coroutine.Initialize(fibre);
-            _routines.Add(coroutine);
             return coroutine;
         }
 
@@ -40,9 +45,13 @@ namespace RamjetAnvil.Coroutine {
             for (int i = _routines.Count - 1; i >= 0; i--) {
                 if (_routines[i].Equals(r)) {
                     _routines.RemoveAt(i);
-                    _routinePool.Return(r);
+                    RecycleRoutine(r);
                 }
             }
+        }
+
+        private void RecycleRoutine(Routine r) {
+            _routinePool.Return(r);
         }
 
         public void Update(long currentFrame, double currentTime) {
@@ -66,7 +75,7 @@ namespace RamjetAnvil.Coroutine {
         }
     }
 
-    public struct TimeSpan {
+    public struct TimeSpan : IEquatable<TimeSpan> {
         public readonly float Duration;
         public readonly int FrameCount;
 
@@ -87,8 +96,43 @@ namespace RamjetAnvil.Coroutine {
                 duration: t1.Duration + t2.Duration);
         }
 
+        public static TimeSpan Min(TimeSpan t1, TimeSpan t2) {
+            return new TimeSpan(
+                duration: Math.Min(t1.Duration, t2.Duration),
+                frameCount: Math.Min(t1.FrameCount, t2.FrameCount));
+        }
+
+        public static TimeSpan Max(TimeSpan t1, TimeSpan t2) {
+            return new TimeSpan(
+                duration: Math.Max(t1.Duration, t2.Duration),
+                frameCount: Math.Max(t1.FrameCount, t2.FrameCount));
+        }
+
+        public bool Equals(TimeSpan other) {
+            return Duration.Equals(other.Duration) && FrameCount == other.FrameCount;
+        }
+
+        public override bool Equals(object obj) {
+            if (ReferenceEquals(null, obj)) return false;
+            return obj is TimeSpan && Equals((TimeSpan) obj);
+        }
+
+        public override int GetHashCode() {
+            unchecked {
+                return (Duration.GetHashCode() * 397) ^ FrameCount;
+            }
+        }
+
+        public static bool operator ==(TimeSpan left, TimeSpan right) {
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(TimeSpan left, TimeSpan right) {
+            return !left.Equals(right);
+        }
+
         public bool IsTimeLeft {
-            get { return Duration > 0f && FrameCount > 0; }
+            get { return Duration > 0f || FrameCount > 0; }
         }
 
         public bool IsTimeUp {
@@ -125,7 +169,7 @@ namespace RamjetAnvil.Coroutine {
         }
 
         public static WaitCommand DontWait {
-            get { return new WaitCommand(); }
+            get { return new WaitCommand(new TimeSpan(duration: 0f, frameCount: 0)); }
         }
 
         public static WaitCommand WaitRoutine(IEnumerator<WaitCommand> routine) {
@@ -259,7 +303,7 @@ namespace RamjetAnvil.Coroutine {
 
     public class Routine : IResetable, IDisposable {
 
-        private readonly Func<IEnumerator<WaitCommand>, Routine> _startSubroutine;
+        private readonly Func<IEnumerator<WaitCommand>, Routine> _createSubroutine;
         private readonly Action<Routine> _disposeRoutine;
 
         private IEnumerator<WaitCommand> _fibre;
@@ -269,8 +313,8 @@ namespace RamjetAnvil.Coroutine {
         private bool _isFinished;
         
 
-        public Routine(Func<IEnumerator<WaitCommand>, Routine> startSubroutine, Action<Routine> disposeRoutine) {
-            _startSubroutine = startSubroutine;
+        public Routine(Func<IEnumerator<WaitCommand>, Routine> createSubroutine, Action<Routine> disposeRoutine) {
+            _createSubroutine = createSubroutine;
             _disposeRoutine = disposeRoutine;
             _activeSubroutines = new List<Routine>();
         }
@@ -280,29 +324,42 @@ namespace RamjetAnvil.Coroutine {
             _activeSubroutines.Clear();
             _activeWaitCommand = WaitCommand.DontWait;
             _isFinished = false;
-            FetchNextInstruction(new TimeSpan(0f, 0));
+            FetchNextInstruction();
         }
 
-        public void Update(TimeSpan timePassed) {
-            if (timePassed.IsTimeLeft) {
+        public TimeSpan Update(TimeSpan timePassed) {
+            TimeSpan leftOverTime = timePassed;
+            if (leftOverTime.IsTimeLeft) {
                 // Find a new instruction and make it the current one
                 if (IsRunningInstructionFinished) {
-                    FetchNextInstruction(timePassed);
+                    FetchNextInstruction();
                 }
 
                 // Update the current instruction
                 if (!_isFinished) {
-                    if (_activeSubroutines.Count == 0 && _activeWaitCommand.TimeSpan.HasValue) {
+                    if (_activeSubroutines.Count > 0) {
+                        for (int i = _activeSubroutines.Count - 1; i >= 0; i--) {
+                            var subroutine = _activeSubroutines[i];
+                            var subroutineTimeLeft = subroutine.Update(timePassed);
+                            if (subroutine.IsFinished) {
+                                _activeSubroutines.RemoveAt(i);
+                            }
+                            leftOverTime = TimeSpan.Min(leftOverTime, subroutineTimeLeft);
+                        }
+                    } else {
+                        leftOverTime = timePassed - _activeWaitCommand.TimeSpan.Value;
                         _activeWaitCommand = _activeWaitCommand - timePassed;
+                    }
 
-                        var leftOverTime = timePassed - _activeWaitCommand.TimeSpan.Value;
-                        Update(leftOverTime);
+                    if (leftOverTime != timePassed) {
+                        leftOverTime = Update(leftOverTime);
                     }
                 }
             }
+            return leftOverTime;
         }
 
-        private void FetchNextInstruction(TimeSpan timeSpan) {
+        private void FetchNextInstruction() {
             // Push/Pop (sub-)coroutines until we get another instruction or we run out of instructions.
             while(!_isFinished && IsRunningInstructionFinished) {
                 if (_fibre.MoveNext()) {
@@ -310,9 +367,8 @@ namespace RamjetAnvil.Coroutine {
                     if (newInstruction.IsRoutine) {
                         for (int i = 0; i < newInstruction.Routines.Length; i++) {
                             var subroutine = newInstruction.Routines[i];
-                            var startedSubroutine = _startSubroutine(subroutine);
+                            var startedSubroutine = _createSubroutine(subroutine);
                             _activeSubroutines.Add(startedSubroutine);
-                            startedSubroutine.Update(timeSpan);
                         }
 
                         _activeWaitCommand = WaitCommand.DontWait;
@@ -327,17 +383,7 @@ namespace RamjetAnvil.Coroutine {
         }
         
         private bool IsRunningInstructionFinished {
-            get {
-                if (_activeSubroutines.Count > 0) {
-                    var subRoutinesFinished = true;
-                    foreach (var routine in _activeSubroutines) {
-                        subRoutinesFinished = subRoutinesFinished && routine.IsFinished;
-                    }
-                    return subRoutinesFinished;
-                } else {
-                    return _activeWaitCommand.IsFinished;
-                }
-            }
+            get { return _activeSubroutines.Count == 0 && _activeWaitCommand.IsFinished; }
         }
 
         public bool IsFinished {
