@@ -344,6 +344,7 @@ namespace RamjetAnvil.Coroutine {
                             var subroutine = _activeSubroutines[i];
                             var subroutineTimeLeft = subroutine.Update(timePassed);
                             if (subroutine.IsFinished) {
+                                subroutine.Dispose();
                                 _activeSubroutines.RemoveAt(i);
                             }
                             leftOverTime = TimeSpan.Min(leftOverTime, subroutineTimeLeft);
@@ -376,7 +377,6 @@ namespace RamjetAnvil.Coroutine {
                         _activeWaitCommand = WaitCommand.DontWait;
                     } else {
                         _activeWaitCommand = newInstruction;
-                        _activeSubroutines.Clear();
                     }
                 } else {
                     _isFinished = true;
@@ -396,7 +396,7 @@ namespace RamjetAnvil.Coroutine {
             _fibre = null;
             for (int i = 0; i < _activeSubroutines.Count; i++) {
                 var activeRoutine = _activeSubroutines[i];
-                activeRoutine.Reset();
+                activeRoutine.Dispose();
             }
             _activeSubroutines.Clear();
             _activeWaitCommand = WaitCommand.DontWait;

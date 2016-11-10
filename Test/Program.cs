@@ -33,7 +33,7 @@ namespace Test
             Console.WriteLine("jaja2");
 
             yield return WaitCommand.Interleave(
-                WaitCommand.WaitSeconds(3).AsRoutine(),
+                WaitCommand.WaitSeconds(3).AsRoutine,
                 Subroutine(false, "aa"),
                 Subroutine(true, "bb"),
                 Subroutine(false, "cc"));
@@ -45,10 +45,12 @@ namespace Test
         }
 
         static IEnumerator<WaitCommand> Subroutine(bool hasSubroutine, string prefix) {
-            if (hasSubroutine) {
-                yield return Subroutine(false, prefix + prefix).AsWaitCommand();
-            }
             yield return WaitCommand.WaitSeconds(5f);
+            if (hasSubroutine) {
+                yield return WaitCommand.Interleave(
+                    Subroutine(false, prefix + prefix),
+                    Subroutine(false, prefix + prefix + "2"));
+            }
             yield return WaitCommand.DontWait;
             Console.WriteLine(prefix + " subroutine");
         }
