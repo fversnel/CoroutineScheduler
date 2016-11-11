@@ -156,6 +156,10 @@ namespace RamjetAnvil.Coroutine {
             Routines = routines;
         }
 
+        public static WaitCommand Wait(System.TimeSpan duration) {
+            return WaitSeconds((float) duration.TotalSeconds);
+        }
+
         public static WaitCommand WaitSeconds(float seconds) {
             return new WaitCommand(new TimeSpan(duration: seconds));
         }
