@@ -27,10 +27,10 @@ namespace RamjetAnvil.Coroutine.Unity {
                     yield return runningRoutine;
                 }
             } else {
-                if (waitCommand.TimeSpan.Value.Duration > 0f) {
-                    yield return new WaitForSeconds(waitCommand.TimeSpan.Value.Duration);
+                if (waitCommand.Duration.Value.Seconds > 0f) {
+                    yield return new WaitForSeconds(waitCommand.Duration.Value.Seconds);
                 } else {
-                    for (int i = 0; i < waitCommand.TimeSpan.Value.FrameCount; i++) {
+                    for (int i = 0; i < waitCommand.Duration.Value.FrameCount; i++) {
                         yield return null;
                     }
                 }

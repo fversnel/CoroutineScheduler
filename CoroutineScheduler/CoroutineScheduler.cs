@@ -55,9 +55,9 @@ namespace RamjetAnvil.Coroutine {
         }
 
         public void Update(long currentFrame, double currentTime) {
-            var timePassed = new TimeSpan(
+            var timePassed = new Duration(
                 frameCount: (int) (currentFrame - _prevFrame),
-                duration: (float) (currentTime - _prevTime));
+                seconds: (float) (currentTime - _prevTime));
 
             for (int i = _routines.Count - 1; i >= 0; i--) {
                 var routine = _routines[i];
@@ -75,64 +75,64 @@ namespace RamjetAnvil.Coroutine {
         }
     }
 
-    public struct TimeSpan : IEquatable<TimeSpan> {
-        public readonly float Duration;
+    public struct Duration : IEquatable<Duration> {
+        public readonly float Seconds;
         public readonly int FrameCount;
 
-        public TimeSpan(float duration = 0f, int frameCount = 0) {
-            Duration = duration;
+        public Duration(float seconds = 0f, int frameCount = 0) {
+            Seconds = seconds;
             FrameCount = frameCount;
         }
 
-        public static TimeSpan operator -(TimeSpan t1, TimeSpan t2) {
-            return new TimeSpan(
+        public static Duration operator -(Duration t1, Duration t2) {
+            return new Duration(
                 frameCount: Math.Max(t1.FrameCount - t2.FrameCount, 0),
-                duration: Math.Max(t1.Duration - t2.Duration, 0f));
+                seconds: Math.Max(t1.Seconds - t2.Seconds, 0f));
         }
 
-        public static TimeSpan operator +(TimeSpan t1, TimeSpan t2) {
-            return new TimeSpan(
+        public static Duration operator +(Duration t1, Duration t2) {
+            return new Duration(
                 frameCount: t1.FrameCount + t2.FrameCount,
-                duration: t1.Duration + t2.Duration);
+                seconds: t1.Seconds + t2.Seconds);
         }
 
-        public static TimeSpan Min(TimeSpan t1, TimeSpan t2) {
-            return new TimeSpan(
-                duration: Math.Min(t1.Duration, t2.Duration),
+        public static Duration Min(Duration t1, Duration t2) {
+            return new Duration(
+                seconds: Math.Min(t1.Seconds, t2.Seconds),
                 frameCount: Math.Min(t1.FrameCount, t2.FrameCount));
         }
 
-        public static TimeSpan Max(TimeSpan t1, TimeSpan t2) {
-            return new TimeSpan(
-                duration: Math.Max(t1.Duration, t2.Duration),
+        public static Duration Max(Duration t1, Duration t2) {
+            return new Duration(
+                seconds: Math.Max(t1.Seconds, t2.Seconds),
                 frameCount: Math.Max(t1.FrameCount, t2.FrameCount));
         }
 
-        public bool Equals(TimeSpan other) {
-            return Duration.Equals(other.Duration) && FrameCount == other.FrameCount;
+        public bool Equals(Duration other) {
+            return Seconds.Equals(other.Seconds) && FrameCount == other.FrameCount;
         }
 
         public override bool Equals(object obj) {
             if (ReferenceEquals(null, obj)) return false;
-            return obj is TimeSpan && Equals((TimeSpan) obj);
+            return obj is Duration && Equals((Duration) obj);
         }
 
         public override int GetHashCode() {
             unchecked {
-                return (Duration.GetHashCode() * 397) ^ FrameCount;
+                return (Seconds.GetHashCode() * 397) ^ FrameCount;
             }
         }
 
-        public static bool operator ==(TimeSpan left, TimeSpan right) {
+        public static bool operator ==(Duration left, Duration right) {
             return left.Equals(right);
         }
 
-        public static bool operator !=(TimeSpan left, TimeSpan right) {
+        public static bool operator !=(Duration left, Duration right) {
             return !left.Equals(right);
         }
 
         public bool IsTimeLeft {
-            get { return Duration > 0f || FrameCount > 0; }
+            get { return Seconds > 0f || FrameCount > 0; }
         }
 
         public bool IsTimeUp {
@@ -143,30 +143,30 @@ namespace RamjetAnvil.Coroutine {
     public struct WaitCommand {
         private static readonly IEnumerator<WaitCommand>[] EmptyRoutines = {};
 
-        public readonly TimeSpan? TimeSpan;
+        public readonly Duration? Duration;
         // TODO Optimize for single routine wait commands
         public readonly IEnumerator<WaitCommand>[] Routines;
 
-        private WaitCommand(TimeSpan timeSpan) {
-            TimeSpan = timeSpan;
+        private WaitCommand(Duration duration) {
+            Duration = duration;
             Routines = EmptyRoutines;
         }
 
         private WaitCommand(IEnumerator<WaitCommand>[] routines) {
-            TimeSpan = null;
+            Duration = null;
             Routines = routines;
         }
 
-        public static WaitCommand Wait(System.TimeSpan duration) {
-            return WaitSeconds((float) duration.TotalSeconds);
+        public static WaitCommand Wait(TimeSpan duration) {
+            return new WaitCommand(new Duration(seconds: (float) duration.TotalSeconds));
         }
 
         public static WaitCommand WaitSeconds(float seconds) {
-            return new WaitCommand(new TimeSpan(duration: seconds));
+            return new WaitCommand(new Duration(seconds: seconds));
         }
 
         public static WaitCommand WaitFrames(int frameCount) {
-            return new WaitCommand(new TimeSpan(frameCount: frameCount));
+            return new WaitCommand(new Duration(frameCount: frameCount));
         }
 
         public static WaitCommand WaitForNextFrame {
@@ -174,7 +174,7 @@ namespace RamjetAnvil.Coroutine {
         }
 
         public static WaitCommand DontWait {
-            get { return new WaitCommand(new TimeSpan(duration: 0f, frameCount: 0)); }
+            get { return new WaitCommand(new Duration(seconds: 0f, frameCount: 0)); }
         }
 
         public static WaitCommand WaitRoutine(IEnumerator<WaitCommand> routine) {
@@ -185,28 +185,28 @@ namespace RamjetAnvil.Coroutine {
             return new WaitCommand(routines);
         }
 
-        public static WaitCommand operator -(WaitCommand command, TimeSpan timeSpan) {
-            if (command.TimeSpan.HasValue) {
-                return new WaitCommand(command.TimeSpan.Value - timeSpan);
+        public static WaitCommand operator -(WaitCommand command, Duration duration) {
+            if (command.Duration.HasValue) {
+                return new WaitCommand(command.Duration.Value - duration);
             }
             throw new ArgumentException("Cannot subtract time from a routine wait command");
         }
 
-        public static WaitCommand operator +(WaitCommand command, TimeSpan timeSpan) {
-            if (command.TimeSpan.HasValue) {
-                return new WaitCommand(command.TimeSpan.Value + timeSpan);
+        public static WaitCommand operator +(WaitCommand command, Duration duration) {
+            if (command.Duration.HasValue) {
+                return new WaitCommand(command.Duration.Value + duration);
             }
             throw new ArgumentException("Cannot add time to a routine wait command");
         }
 
         public bool IsRoutine {
-            get { return !TimeSpan.HasValue; }
+            get { return !Duration.HasValue; }
         }
 
         public bool IsFinished {
             get {
-                if (TimeSpan.HasValue) {
-                    return TimeSpan.Value.IsTimeUp;
+                if (Duration.HasValue) {
+                    return Duration.Value.IsTimeUp;
                 }
                 return false;
             }
@@ -214,8 +214,15 @@ namespace RamjetAnvil.Coroutine {
 
         public IEnumerator<WaitCommand> AsRoutine {
             get {
-                yield return this;
+                if (IsRoutine && Routines.Length == 1) {
+                    return Routines[0];
+                }
+                return AsRoutineInternal();
             }
+        }
+
+        private IEnumerator<WaitCommand> AsRoutineInternal() {
+            yield return this;
         }
     }
 
@@ -230,11 +237,19 @@ namespace RamjetAnvil.Coroutine {
             }
         }
 
+        public static IEnumerator<WaitCommand> WaitUntil(this WaitCommand waitCommand, Func<bool> predicate) {
+            return WaitUntil(waitCommand.AsRoutine, predicate);
+        }
+
         public static IEnumerator<WaitCommand> WaitUntil(this IEnumerator<WaitCommand> routine, Func<bool> predicate) {
             while(!predicate()) {
                 yield return WaitCommand.WaitForNextFrame;
             }
             yield return routine.AsWaitCommand();
+        }
+
+        public static IEnumerator<WaitCommand> WaitWhile(this WaitCommand waitCommand, Func<bool> predicate) {
+            return WaitWhile(waitCommand.AsRoutine, predicate);
         }
 
         public static IEnumerator<WaitCommand> WaitWhile(this IEnumerator<WaitCommand> routine, Func<bool> predicate) {
@@ -244,16 +259,52 @@ namespace RamjetAnvil.Coroutine {
             yield return routine.AsWaitCommand();
         }
 
-        public static IEnumerator<WaitCommand> AndThen(
-            this IEnumerator<WaitCommand> first,
-            IEnumerator<WaitCommand> second) {
+        public static IEnumerator<WaitCommand> RunWhile(this WaitCommand waitCommand, Func<bool> predicate) {
+            return RunWhile(waitCommand.AsRoutine, predicate);
+        }
 
-            while (first.MoveNext()) {
-                yield return first.Current;
+        public static IEnumerator<WaitCommand> RunWhile(this IEnumerator<WaitCommand> routine, Func<bool> predicate) {
+            while (routine.MoveNext() && predicate()) {
+                // Recursively skip subroutines
+                var currentInstruction = routine.Current;
+                if (currentInstruction.IsRoutine) {
+                    var instructionRoutines = routine.Current.Routines;
+
+                    var wrappedRoutines = new IEnumerator<WaitCommand>[instructionRoutines.Length];
+                    for (int i = 0; i < instructionRoutines.Length; i++) {
+                        wrappedRoutines[i] = RunWhile(instructionRoutines[i], predicate);
+                    }
+
+                    yield return WaitCommand.Interleave(wrappedRoutines);
+                } else {
+                    yield return currentInstruction;
+                }
             }
-            while (second.MoveNext()) {
-                yield return second.Current;
-            }
+        }
+
+        public static IEnumerator<WaitCommand> RunUntil(this IEnumerator<WaitCommand> routine, Func<bool> predicate) {
+            return RunWhile(routine, () => !predicate());
+        }
+
+        public static IEnumerator<WaitCommand> RunUntil(this WaitCommand waitCommand, Func<bool> predicate) {
+            return RunUntil(waitCommand.AsRoutine, predicate);
+        }
+
+        public static IEnumerator<WaitCommand> AndThen(this IEnumerator<WaitCommand> first, WaitCommand second) {
+            return AndThen(first.AsWaitCommand(), second);
+        }
+
+        public static IEnumerator<WaitCommand> AndThen(this IEnumerator<WaitCommand> first, IEnumerator<WaitCommand> second) {
+            return AndThen(first.AsWaitCommand(), second.AsWaitCommand());
+        }
+
+        public static IEnumerator<WaitCommand> AndThen(this WaitCommand first, IEnumerator<WaitCommand> second) {
+            return AndThen(first, second.AsWaitCommand());
+        }
+
+        public static IEnumerator<WaitCommand> AndThen(this WaitCommand first, WaitCommand second) {
+            yield return first;
+            yield return second;
         }
 
         public static void Skip(this IEnumerator<WaitCommand> routine) {
@@ -354,8 +405,8 @@ namespace RamjetAnvil.Coroutine {
             FetchNextInstruction();
         }
 
-        public TimeSpan Update(TimeSpan timePassed) {
-            TimeSpan leftOverTime = timePassed;
+        public Duration Update(Duration timePassed) {
+            Duration leftOverTime = timePassed;
             if (leftOverTime.IsTimeLeft) {
                 // Find a new instruction and make it the current one
                 if (IsRunningInstructionFinished) {
@@ -372,10 +423,10 @@ namespace RamjetAnvil.Coroutine {
                                 subroutine.Dispose();
                                 _activeSubroutines.RemoveAt(i);
                             }
-                            leftOverTime = TimeSpan.Min(leftOverTime, subroutineTimeLeft);
+                            leftOverTime = Duration.Min(leftOverTime, subroutineTimeLeft);
                         }
                     } else {
-                        leftOverTime = timePassed - _activeWaitCommand.TimeSpan.Value;
+                        leftOverTime = timePassed - _activeWaitCommand.Duration.Value;
                         _activeWaitCommand = _activeWaitCommand - timePassed;
                     }
 
