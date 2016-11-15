@@ -223,6 +223,20 @@ namespace RamjetAnvil.Coroutine {
             return WaitCommand.WaitRoutine(coroutine);
         }
 
+        public static IEnumerator<WaitCommand> WaitUntil(this IEnumerator<WaitCommand> routine, Func<bool> predicate) {
+            while(!predicate()) {
+                yield return WaitCommand.WaitForNextFrame;
+            }
+            yield return routine.AsWaitCommand();
+        }
+
+        public static IEnumerator<WaitCommand> WaitWhile(this IEnumerator<WaitCommand> routine, Func<bool> predicate) {
+            while(predicate()) {
+                yield return WaitCommand.WaitForNextFrame;
+            }
+            yield return routine.AsWaitCommand();
+        }
+
         public static IEnumerator<WaitCommand> AndThen(
             this IEnumerator<WaitCommand> first,
             IEnumerator<WaitCommand> second) {
