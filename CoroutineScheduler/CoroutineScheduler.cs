@@ -144,6 +144,7 @@ namespace RamjetAnvil.Coroutine {
         private static readonly IEnumerator<WaitCommand>[] EmptyRoutines = {};
 
         public readonly TimeSpan? TimeSpan;
+        // TODO Optimize for single routine wait commands
         public readonly IEnumerator<WaitCommand>[] Routines;
 
         private WaitCommand(TimeSpan timeSpan) {
@@ -221,6 +222,12 @@ namespace RamjetAnvil.Coroutine {
     public static class WaitCommandExtensions {
         public static WaitCommand AsWaitCommand(this IEnumerator<WaitCommand> coroutine) {
             return WaitCommand.WaitRoutine(coroutine);
+        }
+
+        public static IEnumerator<WaitCommand> WaitUntilDone(this IAwaitable awaitable) {
+            while(!awaitable.IsDone) {
+                yield return WaitCommand.WaitForNextFrame;
+            }
         }
 
         public static IEnumerator<WaitCommand> WaitUntil(this IEnumerator<WaitCommand> routine, Func<bool> predicate) {
@@ -427,5 +434,9 @@ namespace RamjetAnvil.Coroutine {
             }
             _disposeRoutine(this);
         }
+    }
+
+    public interface IAwaitable {
+        bool IsDone { get; }
     }
 }
