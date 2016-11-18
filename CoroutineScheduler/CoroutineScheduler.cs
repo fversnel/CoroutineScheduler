@@ -41,15 +41,6 @@ namespace RamjetAnvil.Coroutine {
             return coroutine;
         }
 
-        private void Stop(Routine r) {
-            for (int i = _routines.Count - 1; i >= 0; i--) {
-                if (_routines[i].Equals(r)) {
-                    _routines.RemoveAt(i);
-                    RecycleRoutine(r);
-                }
-            }
-        }
-
         private void RecycleRoutine(Routine r) {
             _routinePool.Return(r);
         }
@@ -64,7 +55,7 @@ namespace RamjetAnvil.Coroutine {
 
                 if (routine.IsFinished) {
                     _routines.RemoveAt(i);
-                    _routinePool.Return(routine);
+                    RecycleRoutine(routine);
                 } else {
                     routine.Update(timePassed);
                 }
@@ -226,6 +217,8 @@ namespace RamjetAnvil.Coroutine {
         }
     }
 
+    public delegate bool Predicate();
+
     public static class WaitCommandExtensions {
         public static WaitCommand AsWaitCommand(this IEnumerator<WaitCommand> coroutine) {
             return WaitCommand.WaitRoutine(coroutine);
@@ -237,33 +230,33 @@ namespace RamjetAnvil.Coroutine {
             }
         }
 
-        public static IEnumerator<WaitCommand> WaitUntil(this WaitCommand waitCommand, Func<bool> predicate) {
+        public static IEnumerator<WaitCommand> WaitUntil(this WaitCommand waitCommand, Predicate predicate) {
             return WaitUntil(waitCommand.AsRoutine, predicate);
         }
 
-        public static IEnumerator<WaitCommand> WaitUntil(this IEnumerator<WaitCommand> routine, Func<bool> predicate) {
+        public static IEnumerator<WaitCommand> WaitUntil(this IEnumerator<WaitCommand> routine, Predicate predicate) {
             while(!predicate()) {
                 yield return WaitCommand.WaitForNextFrame;
             }
             yield return routine.AsWaitCommand();
         }
 
-        public static IEnumerator<WaitCommand> WaitWhile(this WaitCommand waitCommand, Func<bool> predicate) {
+        public static IEnumerator<WaitCommand> WaitWhile(this WaitCommand waitCommand, Predicate predicate) {
             return WaitWhile(waitCommand.AsRoutine, predicate);
         }
 
-        public static IEnumerator<WaitCommand> WaitWhile(this IEnumerator<WaitCommand> routine, Func<bool> predicate) {
+        public static IEnumerator<WaitCommand> WaitWhile(this IEnumerator<WaitCommand> routine, Predicate predicate) {
             while(predicate()) {
                 yield return WaitCommand.WaitForNextFrame;
             }
             yield return routine.AsWaitCommand();
         }
 
-        public static IEnumerator<WaitCommand> RunWhile(this WaitCommand waitCommand, Func<bool> predicate) {
+        public static IEnumerator<WaitCommand> RunWhile(this WaitCommand waitCommand, Predicate predicate) {
             return RunWhile(waitCommand.AsRoutine, predicate);
         }
 
-        public static IEnumerator<WaitCommand> RunWhile(this IEnumerator<WaitCommand> routine, Func<bool> predicate) {
+        public static IEnumerator<WaitCommand> RunWhile(this IEnumerator<WaitCommand> routine, Predicate predicate) {
             while (routine.MoveNext() && predicate()) {
                 // Recursively skip subroutines
                 var currentInstruction = routine.Current;
@@ -282,11 +275,11 @@ namespace RamjetAnvil.Coroutine {
             }
         }
 
-        public static IEnumerator<WaitCommand> RunUntil(this IEnumerator<WaitCommand> routine, Func<bool> predicate) {
+        public static IEnumerator<WaitCommand> RunUntil(this IEnumerator<WaitCommand> routine, Predicate predicate) {
             return RunWhile(routine, () => !predicate());
         }
 
-        public static IEnumerator<WaitCommand> RunUntil(this WaitCommand waitCommand, Func<bool> predicate) {
+        public static IEnumerator<WaitCommand> RunUntil(this WaitCommand waitCommand, Predicate predicate) {
             return RunUntil(waitCommand.AsRoutine, predicate);
         }
 
