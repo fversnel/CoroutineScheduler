@@ -4,7 +4,7 @@ using System.Diagnostics;
 
 namespace RamjetAnvil.Coroutine {
     public interface ICoroutineScheduler {
-        IDisposable Run(IEnumerator<WaitCommand> fibre);
+        IAwaitable Run(IEnumerator<WaitCommand> fibre);
     }
 
     public class CoroutineScheduler : ICoroutineScheduler {
@@ -21,7 +21,7 @@ namespace RamjetAnvil.Coroutine {
             _prevTime = 0f;
         }
 
-        public IDisposable Run(IEnumerator<WaitCommand> fibre) {
+        public IAwaitable Run(IEnumerator<WaitCommand> fibre) {
             return RunInternal(fibre);
         }
 
@@ -53,7 +53,7 @@ namespace RamjetAnvil.Coroutine {
             for (int i = _routines.Count - 1; i >= 0; i--) {
                 var routine = _routines[i];
 
-                if (routine.IsFinished) {
+                if (routine.IsDone) {
                     _routines.RemoveAt(i);
                     RecycleRoutine(routine);
                 } else {
@@ -224,7 +224,10 @@ namespace RamjetAnvil.Coroutine {
             return WaitCommand.WaitRoutine(coroutine);
         }
 
-        public static IEnumerator<WaitCommand> WaitUntilDone(this IAwaitable awaitable) {
+        public static WaitCommand WaitUntilDone(this IAwaitable awaitable) {
+            return WaitUntilDoneInternal(awaitable).AsWaitCommand();
+        }
+        private static IEnumerator<WaitCommand> WaitUntilDoneInternal(IAwaitable awaitable) {
             while(!awaitable.IsDone) {
                 yield return WaitCommand.WaitForNextFrame;
             }
@@ -372,7 +375,7 @@ namespace RamjetAnvil.Coroutine {
         }
     }
 
-    public class Routine : IResetable, IDisposable {
+    public class Routine : IResetable, IAwaitable {
 
         private readonly Func<IEnumerator<WaitCommand>, Routine> _createSubroutine;
         private readonly Action<Routine> _disposeRoutine;
@@ -381,7 +384,7 @@ namespace RamjetAnvil.Coroutine {
 
         private readonly IList<Routine> _activeSubroutines;
         private WaitCommand _activeWaitCommand;
-        private bool _isFinished;
+        private bool _isDone;
         
 
         public Routine(Func<IEnumerator<WaitCommand>, Routine> createSubroutine, Action<Routine> disposeRoutine) {
@@ -394,7 +397,7 @@ namespace RamjetAnvil.Coroutine {
             _fibre = fibre;
             _activeSubroutines.Clear();
             _activeWaitCommand = WaitCommand.DontWait;
-            _isFinished = false;
+            _isDone = false;
             FetchNextInstruction();
         }
 
@@ -407,12 +410,12 @@ namespace RamjetAnvil.Coroutine {
                 }
 
                 // Update the current instruction
-                if (!_isFinished) {
+                if (!_isDone) {
                     if (_activeSubroutines.Count > 0) {
                         for (int i = _activeSubroutines.Count - 1; i >= 0; i--) {
                             var subroutine = _activeSubroutines[i];
                             var subroutineTimeLeft = subroutine.Update(timePassed);
-                            if (subroutine.IsFinished) {
+                            if (subroutine.IsDone) {
                                 subroutine.Dispose();
                                 _activeSubroutines.RemoveAt(i);
                             }
@@ -433,7 +436,7 @@ namespace RamjetAnvil.Coroutine {
 
         private void FetchNextInstruction() {
             // Push/Pop (sub-)coroutines until we get another instruction or we run out of instructions.
-            while(!_isFinished && IsRunningInstructionFinished) {
+            while(!_isDone && IsRunningInstructionFinished) {
                 if (_fibre.MoveNext()) {
                     var newInstruction = _fibre.Current;
                     if (newInstruction.IsRoutine) {
@@ -448,7 +451,7 @@ namespace RamjetAnvil.Coroutine {
                         _activeWaitCommand = newInstruction;
                     }
                 } else {
-                    _isFinished = true;
+                    _isDone = true;
                 }
             }
         }
@@ -457,9 +460,7 @@ namespace RamjetAnvil.Coroutine {
             get { return _activeSubroutines.Count == 0 && _activeWaitCommand.IsFinished; }
         }
 
-        public bool IsFinished {
-            get { return _isFinished; }
-        }
+        public bool IsDone { get { return _isDone; } }
 
         public void Reset() {
             _fibre = null;
@@ -480,7 +481,7 @@ namespace RamjetAnvil.Coroutine {
         }
     }
 
-    public interface IAwaitable {
+    public interface IAwaitable : IDisposable {
         bool IsDone { get; }
     }
 }

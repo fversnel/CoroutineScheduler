@@ -11,23 +11,22 @@ namespace Test
     class Program
     {
         static void Main(string[] args) {
-            Console.WriteLine("jaja1234");
-
             var scheduler = new CoroutineScheduler();
-            scheduler.Run(InterleaveTest());
-            var timePassed = 0f;
-            var frameCounter = -1;
-            while (timePassed < 15f) {
-                Console.WriteLine("ding " + timePassed);
-                timePassed += 1f;
-                frameCounter += 1;
-                scheduler.Update(frameCounter, timePassed);
-                Thread.Sleep(200);
-            }
+            scheduler.Run(SimpleRoutine());
+//            var timePassed = 0f;
+//            var frameCounter = -1;
+//            while (timePassed < 15f) {
+//                Console.WriteLine("ding " + timePassed);
+//                timePassed += 1f;
+//                frameCounter += 1;
+//                scheduler.Update(frameCounter, timePassed);
+//                Thread.Sleep(200);
+//            }
             Console.ReadLine();
         }
 
         static IEnumerator<WaitCommand> SimpleRoutine() {
+            yield return WaitCommand.WaitForNextFrame;
             Console.WriteLine("jaja");
             yield return WaitCommand.Wait(1f.Seconds());
 
