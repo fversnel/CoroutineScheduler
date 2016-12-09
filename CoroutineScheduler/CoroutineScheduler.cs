@@ -50,6 +50,8 @@ namespace RamjetAnvil.Coroutine {
                 frameCount: (int) (currentFrame - _prevFrame),
                 seconds: (float) (currentTime - _prevTime));
 
+            Console.WriteLine("time passed: " + timePassed);
+
             for (int i = _routines.Count - 1; i >= 0; i--) {
                 var routine = _routines[i];
 
@@ -128,6 +130,10 @@ namespace RamjetAnvil.Coroutine {
 
         public bool IsTimeUp {
             get { return !IsTimeLeft; }
+        }
+
+        public override string ToString() {
+            return "(Seconds: " + Seconds + ", Frames: " + FrameCount + ")";
         }
     }
 
@@ -214,6 +220,13 @@ namespace RamjetAnvil.Coroutine {
 
         private IEnumerator<WaitCommand> AsRoutineInternal() {
             yield return this;
+        }
+
+        public override string ToString() {
+            if (IsRoutine) {
+                return "WaitCommand(Routine)";
+            }
+            return "WaitCommand(" + Duration + ")";
         }
     }
 
@@ -312,6 +325,28 @@ namespace RamjetAnvil.Coroutine {
                 }
             }
         }
+
+        // TODO Find a proper 
+
+        public static IEnumerator<WaitCommand> Visit(this IEnumerator<WaitCommand> routine, Action<WaitCommand> visit) {
+            while (routine.MoveNext()) {
+                // Recursively skip subroutines
+                var currentInstruction = routine.Current;
+                if (currentInstruction.IsRoutine) {
+                    var instructionRoutines = routine.Current.Routines;
+
+                    var wrappedRoutines = new IEnumerator<WaitCommand>[instructionRoutines.Length];
+                    for (int i = 0; i < instructionRoutines.Length; i++) {
+                        wrappedRoutines[i] = Visit(instructionRoutines[i], visit);
+                    }
+
+                    yield return WaitCommand.Interleave(wrappedRoutines);
+                } else {
+                    visit(currentInstruction);
+                    yield return currentInstruction;
+                }
+            }
+        }
     }
 
     public class AsyncResult<T> {
@@ -398,37 +433,37 @@ namespace RamjetAnvil.Coroutine {
             _activeSubroutines.Clear();
             _activeWaitCommand = WaitCommand.DontWait;
             _isDone = false;
-            FetchNextInstruction();
+            Update(new Duration(seconds: 0f, frameCount: 0));
         }
 
         public Duration Update(Duration timePassed) {
+            // Find a new instruction and make it the current one
+            if (IsRunningInstructionFinished) {
+                FetchNextInstruction();
+            }
+
             Duration leftOverTime = timePassed;
-            if (leftOverTime.IsTimeLeft) {
-                // Find a new instruction and make it the current one
-                if (IsRunningInstructionFinished) {
-                    FetchNextInstruction();
+            // Update the current instruction
+            if (!_isDone) {
+                if (_activeSubroutines.Count > 0) {
+                    for (int i = _activeSubroutines.Count - 1; i >= 0; i--) {
+                        var subroutine = _activeSubroutines[i];
+                        var subroutineTimeLeft = subroutine.Update(timePassed);
+                        if (subroutine.IsDone) {
+                            subroutine.Dispose();
+                            _activeSubroutines.RemoveAt(i);
+                        }
+                        leftOverTime = Duration.Min(leftOverTime, subroutineTimeLeft);
+                    }
+                } else {
+                    leftOverTime = timePassed - _activeWaitCommand.Duration.Value;
+                    _activeWaitCommand = _activeWaitCommand - timePassed;
                 }
 
-                // Update the current instruction
-                if (!_isDone) {
-                    if (_activeSubroutines.Count > 0) {
-                        for (int i = _activeSubroutines.Count - 1; i >= 0; i--) {
-                            var subroutine = _activeSubroutines[i];
-                            var subroutineTimeLeft = subroutine.Update(timePassed);
-                            if (subroutine.IsDone) {
-                                subroutine.Dispose();
-                                _activeSubroutines.RemoveAt(i);
-                            }
-                            leftOverTime = Duration.Min(leftOverTime, subroutineTimeLeft);
-                        }
-                    } else {
-                        leftOverTime = timePassed - _activeWaitCommand.Duration.Value;
-                        _activeWaitCommand = _activeWaitCommand - timePassed;
-                    }
-
-                    if (leftOverTime != timePassed) {
-                        leftOverTime = Update(leftOverTime);
-                    }
+                // TODO Check if we're stuck on a subroutine, or a wait command
+                //      if not continue
+                if (_activeWaitCommand.IsFinished && _activeSubroutines.Count == 0) {
+                    leftOverTime = Update(leftOverTime);
                 }
             }
             return leftOverTime;

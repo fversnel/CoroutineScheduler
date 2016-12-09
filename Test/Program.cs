@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -12,7 +13,10 @@ namespace Test
     {
         static void Main(string[] args) {
             var scheduler = new CoroutineScheduler();
-            scheduler.Run(SimpleRoutine());
+            //scheduler.Run(SimpleRoutine());
+            scheduler.Run(NeverWait(100));
+            //scheduler.Update(0, 0f);
+            //scheduler.Update(1, 0f);
 //            var timePassed = 0f;
 //            var frameCounter = -1;
 //            while (timePassed < 15f) {
@@ -22,6 +26,8 @@ namespace Test
 //                scheduler.Update(frameCounter, timePassed);
 //                Thread.Sleep(200);
 //            }
+
+            scheduler.Run(Transition("aap"));
             Console.ReadLine();
         }
 
@@ -73,6 +79,54 @@ namespace Test
                 Console.WriteLine(prefix + " " + i);
                 yield return WaitCommand.WaitForNextFrame;
             }
+        }
+
+        static IEnumerator<WaitCommand> NeverWait(int iterationCount) {
+            if (iterationCount >= 100) {
+                Console.WriteLine("First command");
+                yield return WaitCommand.WaitForNextFrame;
+                //yield return WaitCommand.WaitForNextFrame;
+            }
+
+            if (iterationCount <= 0) {
+                Console.WriteLine("I'm done");
+            } else {
+                yield return WaitCommand.DontWait;
+                Console.WriteLine("iteration " + iterationCount);
+                yield return NeverWait(iterationCount - 1).AsWaitCommand();
+            }
+        }
+
+
+
+
+        private static IEnumerator<WaitCommand> Transition(string state) {
+            Console.WriteLine("before exit old state");
+            yield return ExitOldState(state).AsWaitCommand();
+            Console.WriteLine("after exit old state");
+            yield return EnterNewState(state).AsWaitCommand();
+        }
+
+        private static IEnumerator<WaitCommand> ExitOldState(string state) {
+            yield return (OnExit()).Visit(command => {
+                Console.WriteLine("on exit (" + state + ")");
+            }).AsWaitCommand();    
+        }
+
+        private static  IEnumerator<WaitCommand> EnterNewState(string state) {
+            yield return (OnEnter()).Visit(command => {
+                Console.WriteLine("on enter (" + state + ")");
+            }).AsWaitCommand();    
+        }
+
+        private static IEnumerator<WaitCommand> OnExit() {
+            Console.WriteLine("exit old state");
+            yield return WaitCommand.DontWait;
+        }
+
+        private static  IEnumerator<WaitCommand> OnEnter() {
+            Console.WriteLine("enter new state");
+            yield return WaitCommand.DontWait;
         }
     }
 }
