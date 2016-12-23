@@ -141,17 +141,26 @@ namespace RamjetAnvil.Coroutine {
         private static readonly IEnumerator<WaitCommand>[] EmptyRoutines = {};
 
         public readonly Duration? Duration;
-        // TODO Optimize for single routine wait commands
+        // Optimization for wait commands with just one routine
+        public readonly IEnumerator<WaitCommand> SingleRoutine;
         public readonly IEnumerator<WaitCommand>[] Routines;
 
         private WaitCommand(Duration duration) {
             Duration = duration;
             Routines = EmptyRoutines;
+            SingleRoutine = null;
         }
 
         private WaitCommand(IEnumerator<WaitCommand>[] routines) {
             Duration = null;
+            SingleRoutine = null;
             Routines = routines;
+        }
+
+        private WaitCommand(IEnumerator<WaitCommand> routine) {
+            Duration = null;
+            Routines = EmptyRoutines;
+            SingleRoutine = routine;
         }
 
         public static WaitCommand Wait(TimeSpan duration) {
@@ -175,10 +184,13 @@ namespace RamjetAnvil.Coroutine {
         }
 
         public static WaitCommand WaitRoutine(IEnumerator<WaitCommand> routine) {
-            return new WaitCommand(new[] { routine });
+            return new WaitCommand(routine);
         }
 
         public static WaitCommand Interleave(params IEnumerator<WaitCommand>[] routines) {
+            if (routines.Length == 1) {
+                return new WaitCommand(routines[0]);   
+            }
             return new WaitCommand(routines);
         }
 
@@ -211,8 +223,8 @@ namespace RamjetAnvil.Coroutine {
 
         public IEnumerator<WaitCommand> AsRoutine {
             get {
-                if (IsRoutine && Routines.Length == 1) {
-                    return Routines[0];
+                if (SingleRoutine != null) {
+                    return SingleRoutine;
                 }
                 return AsRoutineInternal();
             }
@@ -475,10 +487,15 @@ namespace RamjetAnvil.Coroutine {
                 if (_fibre.MoveNext()) {
                     var newInstruction = _fibre.Current;
                     if (newInstruction.IsRoutine) {
-                        for (int i = 0; i < newInstruction.Routines.Length; i++) {
-                            var subroutine = newInstruction.Routines[i];
-                            var startedSubroutine = _createSubroutine(subroutine);
+                        if (newInstruction.SingleRoutine != null) {
+                            var startedSubroutine = _createSubroutine(newInstruction.SingleRoutine);
                             _activeSubroutines.Add(startedSubroutine);
+                        } else {
+                            for (int i = 0; i < newInstruction.Routines.Length; i++) {
+                                var subroutine = newInstruction.Routines[i];
+                                var startedSubroutine = _createSubroutine(subroutine);
+                                _activeSubroutines.Add(startedSubroutine);
+                            }
                         }
 
                         _activeWaitCommand = WaitCommand.DontWait;
