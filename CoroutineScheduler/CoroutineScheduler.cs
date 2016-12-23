@@ -142,25 +142,25 @@ namespace RamjetAnvil.Coroutine {
 
         public readonly Duration? Duration;
         // Optimization for wait commands with just one routine
-        public readonly IEnumerator<WaitCommand> SingleRoutine;
-        public readonly IEnumerator<WaitCommand>[] Routines;
+        private readonly IEnumerator<WaitCommand> _singleRoutine;
+        private readonly IEnumerator<WaitCommand>[] _routines;
 
         private WaitCommand(Duration duration) {
             Duration = duration;
-            Routines = EmptyRoutines;
-            SingleRoutine = null;
+            _routines = EmptyRoutines;
+            _singleRoutine = null;
         }
 
         private WaitCommand(IEnumerator<WaitCommand>[] routines) {
             Duration = null;
-            SingleRoutine = null;
-            Routines = routines;
+            _singleRoutine = null;
+            _routines = routines;
         }
 
         private WaitCommand(IEnumerator<WaitCommand> routine) {
             Duration = null;
-            Routines = EmptyRoutines;
-            SingleRoutine = routine;
+            _routines = EmptyRoutines;
+            _singleRoutine = routine;
         }
 
         public static WaitCommand Wait(TimeSpan duration) {
@@ -223,8 +223,8 @@ namespace RamjetAnvil.Coroutine {
 
         public IEnumerator<WaitCommand> AsRoutine {
             get {
-                if (SingleRoutine != null) {
-                    return SingleRoutine;
+                if (_singleRoutine != null) {
+                    return _singleRoutine;
                 }
                 return AsRoutineInternal();
             }
@@ -232,6 +232,22 @@ namespace RamjetAnvil.Coroutine {
 
         private IEnumerator<WaitCommand> AsRoutineInternal() {
             yield return this;
+        }
+
+        public int RoutineCount {
+            get {
+                if (_singleRoutine != null) {
+                    return 1;
+                }
+                return _routines.Length;
+            }
+        }
+
+        public IEnumerator<WaitCommand> GetRoutine(int index) {
+            if (_singleRoutine != null && index == 0) {
+                return _singleRoutine;
+            }
+            return _routines[index];
         }
 
         public override string ToString() {
@@ -289,11 +305,11 @@ namespace RamjetAnvil.Coroutine {
                 // Recursively skip subroutines
                 var currentInstruction = routine.Current;
                 if (currentInstruction.IsRoutine) {
-                    var instructionRoutines = routine.Current.Routines;
+                    var instructionRoutines = routine.Current;
 
-                    var wrappedRoutines = new IEnumerator<WaitCommand>[instructionRoutines.Length];
-                    for (int i = 0; i < instructionRoutines.Length; i++) {
-                        wrappedRoutines[i] = RunWhile(instructionRoutines[i], predicate);
+                    var wrappedRoutines = new IEnumerator<WaitCommand>[instructionRoutines.RoutineCount];
+                    for (int i = 0; i < instructionRoutines.RoutineCount; i++) {
+                        wrappedRoutines[i] = RunWhile(instructionRoutines.GetRoutine(i), predicate);
                     }
 
                     yield return WaitCommand.Interleave(wrappedRoutines);
@@ -331,9 +347,9 @@ namespace RamjetAnvil.Coroutine {
         public static void Skip(this IEnumerator<WaitCommand> routine) {
             while (routine.MoveNext()) {
                 // Recursively skip subroutines
-                var instructionRoutines = routine.Current.Routines;
-                for (int i = 0; i < instructionRoutines.Length; i++) {
-                    instructionRoutines[i].Skip();
+                var instructionRoutines = routine.Current;
+                for (int i = 0; i < instructionRoutines.RoutineCount; i++) {
+                    instructionRoutines.GetRoutine(i).Skip();
                 }
             }
         }
@@ -345,11 +361,11 @@ namespace RamjetAnvil.Coroutine {
                 // Recursively skip subroutines
                 var currentInstruction = routine.Current;
                 if (currentInstruction.IsRoutine) {
-                    var instructionRoutines = routine.Current.Routines;
+                    var instructionRoutines = routine.Current;
 
-                    var wrappedRoutines = new IEnumerator<WaitCommand>[instructionRoutines.Length];
-                    for (int i = 0; i < instructionRoutines.Length; i++) {
-                        wrappedRoutines[i] = Visit(instructionRoutines[i], visit);
+                    var wrappedRoutines = new IEnumerator<WaitCommand>[instructionRoutines.RoutineCount];
+                    for (int i = 0; i < instructionRoutines.RoutineCount; i++) {
+                        wrappedRoutines[i] = Visit(instructionRoutines.GetRoutine(i), visit);
                     }
 
                     yield return WaitCommand.Interleave(wrappedRoutines);
@@ -487,15 +503,10 @@ namespace RamjetAnvil.Coroutine {
                 if (_fibre.MoveNext()) {
                     var newInstruction = _fibre.Current;
                     if (newInstruction.IsRoutine) {
-                        if (newInstruction.SingleRoutine != null) {
-                            var startedSubroutine = _createSubroutine(newInstruction.SingleRoutine);
+                        for (int i = 0; i < newInstruction.RoutineCount; i++) {
+                            var subroutine = newInstruction.GetRoutine(i);
+                            var startedSubroutine = _createSubroutine(subroutine);
                             _activeSubroutines.Add(startedSubroutine);
-                        } else {
-                            for (int i = 0; i < newInstruction.Routines.Length; i++) {
-                                var subroutine = newInstruction.Routines[i];
-                                var startedSubroutine = _createSubroutine(subroutine);
-                                _activeSubroutines.Add(startedSubroutine);
-                            }
                         }
 
                         _activeWaitCommand = WaitCommand.DontWait;

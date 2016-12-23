@@ -15,9 +15,9 @@ namespace RamjetAnvil.Coroutine.Unity {
 
         public static IEnumerator ToUnity(this WaitCommand waitCommand, StartRoutine startRoutine) {
             if (waitCommand.IsRoutine) {
-                var runningRoutines = new UnityEngine.Coroutine[waitCommand.Routines.Length];
-                for (int i = 0; i < waitCommand.Routines.Length; i++) {
-                    var routine = waitCommand.Routines[i].ToUnity(startRoutine);
+                var runningRoutines = new UnityEngine.Coroutine[waitCommand.RoutineCount];
+                for (int i = 0; i < waitCommand.RoutineCount; i++) {
+                    var routine = waitCommand.GetRoutine(i).ToUnity(startRoutine);
                     var runningRoutine = startRoutine(routine);
                     runningRoutines[i] = runningRoutine;
                 }
