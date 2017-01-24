@@ -97,9 +97,6 @@ namespace Test
             }
         }
 
-
-
-
         private static IEnumerator<WaitCommand> Transition(string state) {
             Console.WriteLine("before exit old state");
             yield return ExitOldState(state).AsWaitCommand();
