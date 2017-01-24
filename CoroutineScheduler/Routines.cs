@@ -18,6 +18,10 @@ namespace RamjetAnvil.Coroutine
             t -= 2f;
             return -0.5f * (t * t * t * t - 2f);
         };
+
+        public static Animation Reverse(this Animation animation) {
+            return value => animation(1f - value);
+        }
         
         /// <summary>
         /// Animates an arbitrary thing over time from a start value to an end value.
