@@ -1,7 +1,8 @@
-﻿#if UNITY
-using System;
+﻿using System;
 using System.Collections.Generic;
+#if UNITY
 using UnityEngine;
+#endif
 
 namespace RamjetAnvil.Coroutine
 {
@@ -45,6 +46,7 @@ namespace RamjetAnvil.Coroutine
             animator(animation(1f));
         }
 
+        #if UNITY
         public static IEnumerator<WaitCommand> Rotate(DeltaTime deltaTime, Transform transform, Quaternion target, TimeSpan duration, Animation animation = null) {
             animation = animation ?? EaseInOutAnimation;
 
@@ -58,7 +60,7 @@ namespace RamjetAnvil.Coroutine
             var startPositon = transform.position;
             return Animate(deltaTime, duration, lerp => transform.position = Vector3.Lerp(startPositon, newPosition, lerp), animation);
         }
+        #endif
 
     }
 }
-#endif

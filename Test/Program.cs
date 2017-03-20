@@ -14,7 +14,17 @@ namespace Test
         static void Main(string[] args) {
             var scheduler = new CoroutineScheduler();
             //scheduler.Run(SimpleRoutine());
-            scheduler.Run(NeverWait(100));
+            scheduler.Run(Fade("aa"));
+            scheduler.Run(Fade("bb"));
+
+            int currentFrame = 0;
+            float timePassed = 0f;
+            for (int i = 0; i < 100; i++) {
+                scheduler.Update(currentFrame, timePassed);
+                timePassed += 0.1f;
+                currentFrame++;
+            }
+
             //scheduler.Update(0, 0f);
             //scheduler.Update(1, 0f);
 //            var timePassed = 0f;
@@ -27,7 +37,7 @@ namespace Test
 //                Thread.Sleep(200);
 //            }
 
-            scheduler.Run(Transition("aap"));
+            //scheduler.Run(Transition("aap"));
             Console.ReadLine();
         }
 
@@ -48,6 +58,30 @@ namespace Test
             yield return WaitCommand.Wait(1f.Seconds());
             Console.WriteLine("second");
             yield return WaitCommand.Wait(1f.Seconds());
+        }
+
+        static IEnumerator<WaitCommand> Fade(string id) {
+            Console.WriteLine("before fade out " + id);
+            yield return FadeOut(id).AsWaitCommand();
+            Console.WriteLine("in between fades " + id);
+            yield return FadeIn(id).AsWaitCommand();
+            Console.WriteLine("after fade in " + id);
+        }
+
+        static IEnumerator<WaitCommand> FadeIn(string id) {
+            yield return Routines.Animate(
+                () => 0.1.Seconds(), 
+                1.Seconds(), 
+                value => Console.WriteLine("fade in " + value + " " + id), 
+                Routines.EaseInOutAnimation.Reverse()).AsWaitCommand();
+        }
+
+        static IEnumerator<WaitCommand> FadeOut(string id) {
+            yield return Routines.Animate(
+                () => 0.1.Seconds(), 
+                1.Seconds(), 
+                value => Console.WriteLine("fade out " + value + " " + id), 
+                Routines.EaseInOutAnimation).AsWaitCommand();
         }
 
         static IEnumerator<WaitCommand> Subroutine(bool hasSubroutine, string prefix) {

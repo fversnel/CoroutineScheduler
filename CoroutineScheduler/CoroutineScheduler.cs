@@ -42,6 +42,12 @@ namespace RamjetAnvil.Coroutine {
         }
 
         private void RecycleRoutine(Routine r) {
+            for (int i = _routines.Count - 1; i >= 0; i--) {
+                var routine = _routines[i];
+                if (routine == r) {
+                    _routines.RemoveAt(i);
+                }
+            }
             _routinePool.Return(r);
         }
 
@@ -55,7 +61,7 @@ namespace RamjetAnvil.Coroutine {
 
                 if (routine.IsDone) {
                     _routines.RemoveAt(i);
-                    RecycleRoutine(routine);
+                    _routinePool.Return(routine);
                 } else {
                     routine.Update(timePassed);
                 }
